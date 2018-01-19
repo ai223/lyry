@@ -22,11 +22,12 @@ sep = "="*105
 
 def script_start() :
     # obtain all billboard chart names and links 
-    charts_tup = pull_chart_names()
+    charts_tuples = pull_chart_names()
+    
     global chart_names
-    chart_names = charts_tup[0]
+    chart_names = charts_tuples[0]
     global charts_dict
-    charts_dict = charts_tup[1]
+    charts_dict = charts_tuples[1]
     
     # begin user interaction
     print(msg)
@@ -38,38 +39,30 @@ def script_start() :
 
 def get_chart_selection() :
     chart = input("Please enter a billboard chart name or number: ").strip()   
-    print("Chart: " + chart) 
-    print(chart.isalpha())
-    print(type(chart))
+
     if chart == "ls" :
         ls(chart_names)
-        get_chart_selection()
+        return get_chart_selection()
     elif chart == "q" :
-        print("Thanks for using the program!")
+        print(sep, "\nThanks for using the program!")
         sys.exit()
     else: 
         if chart.isdigit() :
             chart_name = chart_names[int(chart)]
-            print(sep)
-            print("You have selected: " + chart_name + ".")
+            print(sep + "\nYou have selected: " + chart_name + ".")
             return charts_dict[chart_name]
-        elif all(x.isalpha or x.isspace() for x in chart) :
+        elif all((x.isalpha() or x.isspace()) and x.isdigit() for x in chart) :
             print("You have selected: " + chart + ".")
             return charts_dict[chart]
         else :
-            print(sep)
-            print("\nYou have made an invalid s (name with number is " + 
-                  "not allowed) Try again.\n")
-            get_chart_selection()
+            print(sep + "\nYou have made an invalid selection " + 
+                        "(name with number is not allowed) Try again.\n")
+            return get_chart_selection()
             
 
 def pull_chart_names() :
     url = "https://www.billboard.com/charts"
-    req = requests.get(url)
-    if req.status_code == 200 :
-        html = req.text
-    else :
-        return "Page Not Found."
+    html = requestURL(url)
     
     soup = BeautifulSoup(html, 'lxml')
     soup.prettify()
@@ -83,12 +76,15 @@ def pull_chart_names() :
 
     return (name_list, chart_dict)
 
+
 """ Prompt user for valid date or range of dates corresponding to available 
     Billboard chart(s). """
 def get_date_selection(chart_link) :
     print("Note: dates need to be entered in a valid YYYY-MM-DD format.\n" + 
           "Hit 'Enter' to obtain default current chart information.")
     date = input("Please enter a date or range of dates: ")
+    print("chart_link: " + chart_link)
+
     
     if date == '' :  
         return ["https://www.billboard.com/" + chart_link]
@@ -98,13 +94,8 @@ def get_date_selection(chart_link) :
 
 
 def create_song_and_artists_urls(url_list) :
-    print(url_list)
     for url in url_list : 
-        req = requests.get(url)
-        if req.status_code == 200 :
-            html = req.text
-        else :
-            return "Page Not Found."
+        html = requestURL(url)
         
         soup = BeautifulSoup(html, 'lxml')
         song_tags = soup.select(".chart-row__song")
@@ -119,9 +110,7 @@ def create_song_and_artists_urls(url_list) :
         
         print(song_list)
         print(artist_list)
-        
-        print("Nothing!")
-        
+                
         assert len(song_list) == len(artist_list)
 
 """ lname: list that contains strings representing billboard chart names
@@ -142,6 +131,16 @@ def ls(lname) :
 def display_options() :
     print("\tls -" + " "*10 + "display all chart names")
     print("\tq  -" + " "*10 + "exit program")    
+
+
+def requestURL(url) :
+    req = requests.get(url)
+    if req.status_code == 200 :
+        return req.text
+    else :
+        print("Page Not Found.")
+        return ''
+    
 
 
 if __name__=="__main__" :
