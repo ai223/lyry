@@ -85,7 +85,6 @@ def pull_chart_names() :
     html = requestURL(url)
     
     soup = BeautifulSoup(html, 'lxml')
-    soup.prettify()
     chart_links = soup.select('.chart-row__chart-link')
     
     name_list, href_list= [], []
@@ -127,8 +126,12 @@ def get_date_selection(chart_link) :
         date1 = date[:split]
         date2 = date[split+1:]
 
-        validate(date1, date2)
+        all_dates = validate(date1, date2)
+        
+        func = lambda each_date : "https://www.billboard.com/" + chart_link + "/" + str(each_date)
+        all_chart_urls = list( map(func, all_dates) )
 
+        print(all_chart_urls)
         sys.exit()
     else :
         print("Uh-oh. Can't handle that yet.")
@@ -143,7 +146,6 @@ def create_song_and_artists_urls(chart_url_list) :
         print(url)
 
         html = requestURL(url)
-        
         soup = BeautifulSoup(html, 'lxml')
         song_tags = soup.select(".chart-row__song")
         artist_tags = soup.select(".chart-row__artist") 
@@ -164,7 +166,6 @@ def create_song_and_artists_urls(chart_url_list) :
         all_metrolyrics_urls_dict[url] = metrolyrics_urls
         
     return all_metrolyrics_urls_dict
-
 
 
 """  """
@@ -193,7 +194,7 @@ def extract_and_write_lyrics(chart_url_list, all_metrolyrics_urls_dict) :
                 file.write(title)
                 
                 verse_tags = soup.select('.verse')
-                # if lyrics were not available
+                # if lyrics were not available on metrolyrics
                 if len(verse_tags) == 0 :
                     file.write("\nValid link but no lyrics!\n")
                 
@@ -225,6 +226,19 @@ def create_metrolyrics_url(song_name, artist_name):
     
     return "http://www.metrolyrics.com/" + song + "-lyrics-" + artist + ".html"
 
+
+def create_azlyrics_url(metrolyrics_url):
+    "http://www.metrolyrics.com/thunder-lyrics-imagine-dragons.html"
+
+    pos1 = metrolyrics_url.rfind("/") + 1
+    pos2 = metrolyrics_url.find("lyrics") - 1
+    pos3 = pos2 + 8
+    
+    song_name = metrolyrics_url[pos1:pos2]
+    artist_name = metrolyrics_url[pos3:]
+    
+    
+    return
 
 """ """
 def createFilename(chart_url) :
@@ -310,8 +324,7 @@ def validate(date1, date2=None) :
             all_chart_dates.append(str(date1))
             date1 += datetime.timedelta(days = 7)
         
-        print(all_chart_dates)
-        sys.exit()
+        return all_chart_dates
 
 
 """ date: a datetime object representing a date falling on a week when a given 
