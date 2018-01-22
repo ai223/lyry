@@ -172,9 +172,12 @@ def create_song_and_artists_urls(chart_url_list) :
 def extract_and_write_lyrics(chart_url_list, all_metrolyrics_urls_dict) :
     
     # create list of all filenames
-
     for chart_url in chart_url_list:      
         filename = createFilename(chart_url)
+        
+        # create variables to keep track of successful scrapes
+        num_songs = len(all_metrolyrics_urls_dict[chart_url])
+        num_missed = 0
         
         # extract and write song lyrics            
         print("Extracting and writing song lyrics...")
@@ -183,6 +186,7 @@ def extract_and_write_lyrics(chart_url_list, all_metrolyrics_urls_dict) :
                 html = requestURL(song_url)
                 if html == '' : 
                     file.write("Could not find: " + song_url + "\n" + sep)
+                    num_missed += 1
                     continue
                     
                 soup = BeautifulSoup(html, 'lxml')
@@ -194,15 +198,29 @@ def extract_and_write_lyrics(chart_url_list, all_metrolyrics_urls_dict) :
                 file.write(title)
                 
                 verse_tags = soup.select('.verse')
-                # if lyrics were not available on metrolyrics
+                
+                # if lyrics were not available on metrolyrics, try azlyrics
                 if len(verse_tags) == 0 :
-                    file.write("\nValid link but no lyrics!\n")
+                    az_url = create_azlyrics_url(song_url)
+                    az_info = extract_azlyrics(az_url)
+                    if az_info == "#" :
+                        file.write("Could not find" + az_url + "\n" + sep + "\n")
+                        num_missed += 1
+                        continue
+                    
+                    file.write(az_info[0]+"\n")
+                    file.write(az_info[1])
+                    file.write("\n" + sep + "\n")   
+                    continue         
                 
                 [file.write(tag.text + "\n\n") for tag in verse_tags]
-                file.write("\n" + sep + "\n")            
+                file.write("\n" + sep + "\n")        
+            
+            file.write("Number of total songs: " + str(num_songs))
+            file.write("Number of found lyrics: " + str(num_songs - num_missed))
+            file.write("Success rate: " + str((num_songs - num_missed/num_songs)*100) + "%")    
 
-                 
-        
+                       
 """ """        
 def create_metrolyrics_url(song_name, artist_name):
     # process song name
@@ -227,18 +245,55 @@ def create_metrolyrics_url(song_name, artist_name):
     return "http://www.metrolyrics.com/" + song + "-lyrics-" + artist + ".html"
 
 
+"""  """
 def create_azlyrics_url(metrolyrics_url):
     "http://www.metrolyrics.com/thunder-lyrics-imagine-dragons.html"
 
     pos1 = metrolyrics_url.rfind("/") + 1
-    pos2 = metrolyrics_url.find("lyrics") - 1
+    pos2 = metrolyrics_url.find("-lyrics-")
     pos3 = pos2 + 8
+        
+    song_name = metrolyrics_url[pos1:pos2].replace("-", "")
+    artist_name = metrolyrics_url[pos3:-5].replace("-", "")
     
-    song_name = metrolyrics_url[pos1:pos2]
-    artist_name = metrolyrics_url[pos3:]
+    azlyrics_url = "https://www.azlyrics.com/lyrics/" + artist_name + "/" + song_name + ".html"
     
+    print("AZ before: " + azlyrics_url)
+    if "'" in azlyrics_url :
+        azlyrics_url.replace("'", "")
+    print("AZ after: " + azlyrics_url)
+        
+    return azlyrics_url
+
+
+"""  """
+def extract_azlyrics(url) :
+    html = ''
     
-    return
+    hdrs = {'User-Agent':"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/534.30 (KHTML, like Gecko) Chrome/12.0.742.112 Safari/534.30"}
+    req = requests.get(url, headers=hdrs)
+    
+    if req.status_code == 200 :
+        html = req.text
+    else :
+        print("AZLyrics Page Not Found.")
+        return "#"
+
+    # if scrape unsuccessful 
+    if html == '' : 
+        return "#"
+        
+    soup = BeautifulSoup(html, 'lxml')
+    
+    #get song name and artist
+    title = soup.find("title").text
+    
+    # get lyrics
+    div_tags = soup.findAll("div", {"class":None})
+    lyrics = div_tags[1].text
+    
+    return (title, lyrics)
+
 
 """ """
 def createFilename(chart_url) :
@@ -353,4 +408,3 @@ def requestURL(url) :
 
 if __name__=="__main__" :
     script_start()
-    
