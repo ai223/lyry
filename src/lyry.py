@@ -131,8 +131,7 @@ def get_date_selection(chart_link) :
         func = lambda each_date : "https://www.billboard.com/" + chart_link + "/" + str(each_date)
         all_chart_urls = list( map(func, all_dates) )
 
-        print(all_chart_urls)
-        sys.exit()
+        return all_chart_urls
     else :
         print("Uh-oh. Can't handle that yet.")
         sys.exit()
@@ -180,13 +179,23 @@ def extract_and_write_lyrics(chart_url_list, all_metrolyrics_urls_dict) :
         num_missed = 0
         
         # extract and write song lyrics            
-        print("Extracting and writing song lyrics...")
-        with open(filename, 'w') as file: 
+        print("\nExtracting and writing song lyrics...")
+        with open(filename, 'w', encoding="utf-8") as file: 
             for song_url in all_metrolyrics_urls_dict[chart_url] :
                 html = requestURL(song_url)
-                if html == '' : 
-                    file.write("Could not find: " + song_url + "\n" + sep)
-                    num_missed += 1
+                
+                # try azlyrics.com if metrolyrics 404-Missing Page is recieved
+                if html == '' :
+                    az_url = create_azlyrics_url(song_url)
+                    az_info = extract_azlyrics(az_url)
+                    if az_info == "#" : 
+                        file.write("Could not find: " + az_url + "\n" + sep)
+                        num_missed += 1
+                        continue
+                    
+                    file.write(az_info[0]+"\n")
+                    file.write(az_info[1])
+                    file.write("\n" + sep + "\n")
                     continue
                     
                 soup = BeautifulSoup(html, 'lxml')
@@ -194,8 +203,6 @@ def extract_and_write_lyrics(chart_url_list, all_metrolyrics_urls_dict) :
                 # remove "Metrolyrics" from title 
                 split = title.find("|")
                 title = title[:split-1] + "\n\n"
-                file.write(song_url + "\n")
-                file.write(title)
                 
                 verse_tags = soup.select('.verse')
                 
@@ -213,23 +220,30 @@ def extract_and_write_lyrics(chart_url_list, all_metrolyrics_urls_dict) :
                     file.write("\n" + sep + "\n")   
                     continue         
                 
+                file.write(song_url + "\n")
+                file.write(title)
                 [file.write(tag.text + "\n\n") for tag in verse_tags]
                 file.write("\n" + sep + "\n")        
             
-            file.write("Number of total songs: " + str(num_songs))
-            file.write("Number of found lyrics: " + str(num_songs - num_missed))
-            file.write("Success rate: " + str((num_songs - num_missed/num_songs)*100) + "%")    
+            file.write("Number of total songs: " + str(num_songs) + '\n')
+            file.write("Number of found lyrics: " + str(num_songs - num_missed) + '\n')
+            file.write("Success rate: " + str(((num_songs-num_missed)/num_songs)*100) + "%")    
 
                        
 """ """        
 def create_metrolyrics_url(song_name, artist_name):
     # process song name
     song = (song_name.lower()).replace(" ", "-")
+        
+    # check for illegal characters in song name
+    song = cleanup(song, ["(", ")", "'"])
+    print(song)
     
     # process artist name
     symbol_list = ["&", "Featuring", ","]
     
-    # check for cutoff symbols
+    # check for cutoff symbols (for songs with multiple artists, only the first name is kept)
+    # e.g. "Queen Featuring David Bowie" -> "Queen." 
     cutoff = len(artist_name)
     for symbol in symbol_list :
         if symbol in artist_name :
@@ -239,15 +253,18 @@ def create_metrolyrics_url(song_name, artist_name):
     
     artist = (artist_name.lower()).replace(" ", "-")
     
-    # check for errant periods (.) in artist's name (E.g. "Portugal. The Man").
-    artist = artist.replace(".", "") if "." in artist else artist   
+    # check for illegal character's in artist's name
+    # E.g. 'the' is not kept in artist's name, so "the-beatles" -> "beatles" 
+    artist = cleanup(artist, [".", "!", "?"])
     
-    return "http://www.metrolyrics.com/" + song + "-lyrics-" + artist + ".html"
+    url = "http://www.metrolyrics.com/" + song + "-lyrics-" + artist + ".html"
+    if "lyrics-the-" in url : url = url.replace('lyrics-the-', 'lyrics-')
+
+    return url
 
 
 """  """
 def create_azlyrics_url(metrolyrics_url):
-    "http://www.metrolyrics.com/thunder-lyrics-imagine-dragons.html"
 
     pos1 = metrolyrics_url.rfind("/") + 1
     pos2 = metrolyrics_url.find("-lyrics-")
@@ -258,10 +275,8 @@ def create_azlyrics_url(metrolyrics_url):
     
     azlyrics_url = "https://www.azlyrics.com/lyrics/" + artist_name + "/" + song_name + ".html"
     
-    print("AZ before: " + azlyrics_url)
     if "'" in azlyrics_url :
-        azlyrics_url.replace("'", "")
-    print("AZ after: " + azlyrics_url)
+        azlyrics_url = azlyrics_url.replace("'", "")
         
     return azlyrics_url
 
@@ -312,6 +327,14 @@ def display_options() :
     print("\tls -" + " "*10 + "display all chart names")
     print("\tq  -" + " "*10 + "exit program")    
 
+
+""""""
+def cleanup(name, illegal_char_list) :
+    for char in illegal_char_list :
+        if char in name :
+            name = name.replace(char, "")
+            
+    return name
 
 """ lname: list that contains strings representing billboard chart names
     
@@ -408,3 +431,5 @@ def requestURL(url) :
 
 if __name__=="__main__" :
     script_start()
+
+    
