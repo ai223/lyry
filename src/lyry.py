@@ -18,7 +18,7 @@ charts_dict = {}
 
 # string constants
 msg = "Welcome to Lyry, a program which allows you to obtain the lyrics from any billboard chart."
-sep = "="*105 + "\n"
+sep = "\n" + "="*105 + "\n"
 
 
 """  """
@@ -40,7 +40,39 @@ def script_start() :
     extract_and_write_lyrics(chart_url_list, all_metrolyrics_urls_dict)   
 
 
-"""  """
+""" Accesses billboard.com to get a list of all currently offered charts and their 
+    respective bilbloard.com links.
+    
+    The function returns both a list of chart names (for pretty printing) and a 
+    dictionary that returns a billboard.com link when queried with the name of a
+    particular chart.
+
+    @return name_list: a list of all billboard chart names, as appearing on 
+                       https://www.billboard.com/charts 
+    
+    @return chart_dict: a dictionary where the key-value pairs are chart names and
+                        their respective billboard.com links """
+def pull_chart_names() :
+    url = "https://www.billboard.com/charts"
+    html = requestURL(url)
+    
+    soup = BeautifulSoup(html, 'lxml')
+    chart_links = soup.select('.chart-row__chart-link')
+    
+    name_list, href_list= [], []
+    for i in chart_links :
+        name_list.append(i.string)
+        href_list.append(i['href'])
+    chart_dict = dict(zip(name_list, href_list))
+
+    return (name_list, chart_dict)
+
+
+""" Prompts the user to select a billboard chart for lyrics extraction.
+
+    The user can make a few different choices. They can enter a number corresponding to
+    a particular billboard chart (i.e. "40" representing "Hot Country Songs") or they can
+    enter the chart name in full.  """
 def get_chart_selection() :
     chart = input("Please enter a billboard chart name or number: ").strip()   
 
@@ -63,8 +95,13 @@ def get_chart_selection() :
             earliest_date = getEarliestDate(charts_dict[chart_name])
             
             print(sep + "\nYou have selected: " + chart_name + ".")
-            print("The earliest available date for " + chart_name + " is: " + earliest_date)
-            
+            print("\nNow enter a date or range of dates from which " +
+              "you would like to obtain lyrics.\n\n(Note: dates need to be entered in " +
+              "a valid YYYY-MM-DD format. To enter a range of dates, simply enter two " +
+              "dates\nseparated by a single space (e.g. '2011-01-03 2011-07-21'). Hit " +
+              "'Enter' without typing anything to obtain the\ncurrent chart by default.)" + 
+              "\n\nThe earliest available date for " + chart_name + " is: " + earliest_date)
+                        
             return charts_dict[chart_name]
         
         # if user enters chart name
@@ -77,31 +114,13 @@ def get_chart_selection() :
             print(sep + "\nYou have made an invalid selection " + 
                         "(name with number is not allowed) Try again.\n")
             return get_chart_selection()
-            
-
-"""  """
-def pull_chart_names() :
-    url = "https://www.billboard.com/charts"
-    html = requestURL(url)
-    
-    soup = BeautifulSoup(html, 'lxml')
-    chart_links = soup.select('.chart-row__chart-link')
-    
-    name_list, href_list= [], []
-    for i in chart_links :
-        name_list.append(i.string)
-        href_list.append(i['href'])
-    chart_dict = dict(zip(name_list, href_list))
-
-    return (name_list, chart_dict)
 
 
 """ Prompt user for valid date or range of dates corresponding to available 
     Billboard chart(s). """
 def get_date_selection(chart_link) :
-    print("Note: dates need to be entered in a valid YYYY-MM-DD format.\n" + 
-          "Hit 'Enter' to obtain default current chart information.")
-    date = input("Please enter a date or range of dates: ").strip()
+ 
+    date = input("Please enter your date selection: ").strip()
     
     if date == 'q' :
         print(sep, "\nThanks for using the program!")
@@ -133,9 +152,9 @@ def get_date_selection(chart_link) :
 
         return all_chart_urls
     else :
-        print("Uh-oh. Can't handle that yet.")
-        sys.exit()
-
+        print("Invalid date selection: " + date + ". Please try again or enter 'q' to stop." )
+        return get_date_selection(chart_link)
+    
 
 """  """
 def create_song_and_artists_urls(chart_url_list) :
@@ -189,13 +208,14 @@ def extract_and_write_lyrics(chart_url_list, all_metrolyrics_urls_dict) :
                     az_url = create_azlyrics_url(song_url)
                     az_info = extract_azlyrics(az_url)
                     if az_info == "#" : 
-                        file.write("Could not find: " + az_url + "\n" + sep)
+                        file.write("Could not find lyrics. Tried:\n\n\t\t" 
+                                   + song_url + "\n\t\t" + az_url + sep)
                         num_missed += 1
                         continue
                     
                     file.write(az_info[0]+"\n")
                     file.write(az_info[1])
-                    file.write("\n" + sep + "\n")
+                    file.write(sep)
                     continue
                     
                 soup = BeautifulSoup(html, 'lxml')
@@ -211,19 +231,20 @@ def extract_and_write_lyrics(chart_url_list, all_metrolyrics_urls_dict) :
                     az_url = create_azlyrics_url(song_url)
                     az_info = extract_azlyrics(az_url)
                     if az_info == "#" :
-                        file.write("Could not find" + az_url + "\n" + sep + "\n")
+                        file.write("Could not find lyrics. Tried:\n\n\t\t" 
+                                   + song_url + "\n\t\t" + az_url + sep)
                         num_missed += 1
                         continue
                     
                     file.write(az_info[0]+"\n")
                     file.write(az_info[1])
-                    file.write("\n" + sep + "\n")   
+                    file.write(sep)   
                     continue         
                 
                 file.write(song_url + "\n")
                 file.write(title)
                 [file.write(tag.text + "\n\n") for tag in verse_tags]
-                file.write("\n" + sep + "\n")        
+                file.write(sep)        
             
             file.write("Number of total songs: " + str(num_songs) + '\n')
             file.write("Number of found lyrics: " + str(num_songs - num_missed) + '\n')
@@ -236,11 +257,10 @@ def create_metrolyrics_url(song_name, artist_name):
     song = (song_name.lower()).replace(" ", "-")
         
     # check for illegal characters in song name
-    song = cleanup(song, ["(", ")", "'"])
-    print(song)
+    song = cleanup(song, ["(", ")", "'", "&"])
     
     # process artist name
-    symbol_list = ["&", "Featuring", ","]
+    symbol_list = ["&", "Featuring", ",", "And", "Feat", "With"]
     
     # check for cutoff symbols (for songs with multiple artists, only the first name is kept)
     # e.g. "Queen Featuring David Bowie" -> "Queen." 
@@ -323,7 +343,6 @@ def createFilename(chart_url) :
         
 """ Shows user message containing possible keyboard inputs """
 def display_options() :
-    print("\n")
     print("\tls -" + " "*10 + "display all chart names")
     print("\tq  -" + " "*10 + "exit program")    
 
@@ -412,10 +431,17 @@ def validate(date1, date2=None) :
 def resetDate(date) :
     
     day_of_week = date.strftime("%A")
-    # if day of week is not Satruday, move date up to Saturday
-    while day_of_week != "Saturday" :
-        date = date + datetime.timedelta(days = 1)
-        day_of_week = date.strftime("%A")    
+    
+    switchover_date = datetime.date(1961, 12, 25)
+    
+    if date <= switchover_date :
+        while day_of_week != "Monday" :
+            date = date + datetime.timedelta(days = 1)
+            day_of_week = date.strftime("%A")           
+    else :
+        while day_of_week != "Saturday" :
+            date = date + datetime.timedelta(days = 1)
+            day_of_week = date.strftime("%A")    
     
     return date
 
