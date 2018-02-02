@@ -10,10 +10,8 @@ from bs4 import BeautifulSoup
 import requests
 import datetime
 
-import csv
 import openpyxl
 from openpyxl.styles.fonts import Font
-
 
 # global variables
 chart_names = []
@@ -40,8 +38,9 @@ def script_start(msg) :
     chart_link = get_chart_selection()
     chart_url_list = get_date_selection(chart_link)
     all_songs_and_artists_dict = get_song_and_artist_names(chart_url_list)
-    write_billboard_lyrics_csv2(chart_url_list, all_songs_and_artists_dict)
+    write_billboard_lyrics_csv(chart_url_list, all_songs_and_artists_dict)
     go_again()
+
 
 """ Accesses billboard.com to get a list of all currently offered charts and their 
     respective bilbloard.com links.
@@ -99,11 +98,13 @@ def get_chart_selection() :
             
             print(sep + "\nYou have selected: " + chart_name + ".")
             print("\nNow enter a date or range of dates from which " +
-              "you would like to obtain lyrics.\n\n(Note: dates need to be entered in " +
-              "a valid YYYY-MM-DD format. To enter a range of dates, simply enter two " +
-              "dates\nseparated by a single space (e.g. '2011-01-03 2011-07-21'). Hit " +
-              "'Enter' without typing anything to obtain the\ncurrent chart by default.)" + 
-              "\n\nThe earliest available date for " + chart_name + " is: " + earliest_date)
+              "you would like to obtain lyrics.\n\nNote: chart dates need to be entered " +
+              "in a valid YYYY-MM-DD format. (Hit 'Enter' without typing\nanything to obtain " + 
+              "the current chart by default.) To enter a range of dates, simply enter two " +
+              "dates\nseparated by a single space (e.g. '2011-01-03 2011-07-21'). You can " +
+              "also input the year by itself\n(e.g. '2015') to get all the chart lyrics " + 
+              "from that year.\n\nThe earliest available date for " + chart_name + " is: " + 
+              earliest_date)
                         
             return charts_dict[chart_name]
         
@@ -123,7 +124,7 @@ def get_chart_selection() :
     Billboard chart(s). """
 def get_date_selection(chart_link) :
  
-    date = input("Please enter your date selection: ").strip()
+    date = input("\nPlease enter your date selection: ").strip()
     
     if date == 'q' :
         print(sep, "\nThanks for using the program!")
@@ -135,6 +136,19 @@ def get_date_selection(chart_link) :
         date = resetDate(today)
         
         return ["https://www.billboard.com/" + chart_link + "/" + str(date)]
+    
+    elif len(date) == 4 :
+        date1 = date + "-01-01"
+        date2 = date + "-12-31"
+        
+        all_dates = validate(date1, date2)
+        if all_dates == '#' :
+            return get_date_selection(chart_link)
+        
+        func = lambda each_date : "https://www.billboard.com/" + chart_link + "/" + str(each_date)
+        all_chart_urls = list( map(func, all_dates) )
+
+        return all_chart_urls        
     
     elif len(date) == 10 :
         date = validate(date)
@@ -149,6 +163,8 @@ def get_date_selection(chart_link) :
         date2 = date[split+1:]
 
         all_dates = validate(date1, date2)
+        if all_dates == "#" :
+            return get_date_selection(chart_link)
         
         func = lambda each_date : "https://www.billboard.com/" + chart_link + "/" + str(each_date)
         all_chart_urls = list( map(func, all_dates) )
@@ -163,6 +179,7 @@ def get_date_selection(chart_link) :
 def get_song_and_artist_names(chart_url_list) :
     all_songs_and_artists_dict = {}
     
+    print("Extracting song and artist information...")
     for url in chart_url_list :
         
         html = requestURL(url)
@@ -277,50 +294,8 @@ def write_billboard_lyrics_txt(chart_url_list, all_songs_and_artists_dict) :
             file.write("Success rate: " + str(percent_yield()) + "%")               
 
 
-""" """
-def write_billboard_lyrics_csv(chart_url_list, all_songs_and_artists_dict) :
-    
-    for chart_url in chart_url_list :
-        filename = createFilename(chart_url) + ".csv"
-        
-        header = ["Position", "Song", "Lyrics", "Last Week", "Weeks on Chart"]
-        with open(filename, "w", encoding="utf-8") as file :
-            writer = csv.writer(file)
-            writer.writerow(header)
-            
-            song_and_artist_list = all_songs_and_artists_dict[chart_url]
-            
-            tot_num_songs = len(song_and_artist_list)
-            tot_num_missd = 0
-            def tot_num_found() : return tot_num_songs - tot_num_missd
-            def percent_yield() : return ((tot_num_songs - tot_num_missd)/tot_num_songs)*100
-            
-            for song_and_artist_iter in song_and_artist_list :
-                song_name   = song_and_artist_iter[0]
-                artist_name = song_and_artist_iter[1]
-                position = song_and_artist_iter[2]
-                last_week = song_and_artist_iter[3]
-                weeks_on = song_and_artist_iter[4]
-                
-                lyrics = extract_billboard_lyrics(song_name, artist_name)
-                
-                if lyrics == '' : 
-                    tot_num_missd += 1
-                    continue
-                                
-                row = [position, artist_name, song_name, lyrics, last_week, weeks_on]
-                writer.writerow(row)  
-            
-            success_row_header = ["Total Songs", "Found Songs", "Success Rate"]
-            success_row_report = [str(tot_num_songs), str(tot_num_found()), str(percent_yield())]   
-            writer.writerow(success_row_header)
-            writer.writerow(success_row_report)
-    
-    return
-
-
 """  """
-def write_billboard_lyrics_csv2(chart_url_list, all_songs_and_artists_dict) :
+def write_billboard_lyrics_csv(chart_url_list, all_songs_and_artists_dict) :
     wb = openpyxl.Workbook()
 
     # create filename for the .csv file or get it from user 
@@ -401,12 +376,21 @@ def write_billboard_lyrics_csv2(chart_url_list, all_songs_and_artists_dict) :
             ws.append(row)
             wb.save(filename)
         
+        # adjust column alignment
+        cols= ws.iter_cols(min_col=5)
+        for col in cols :
+            for cell in col :
+                align_obj = cell.alignment.copy(horizontal='right')
+                cell.alignment= align_obj
+        
+        # add percent yield info
         success_row_header = ["Total Songs", "Found Songs", "Success Rate"]
         success_row_report = [str(tot_num_songs), str(tot_num_found()), str(percent_yield())]   
         ws.append([''])
         ws.append(success_row_header)
         ws.append(success_row_report) 
 #         wb.remove_sheet(wb.get_sheet_names()[0])
+
         wb.save(filename)   
 
 
@@ -701,6 +685,7 @@ def resetDate(date) :
     
     day_of_week = date.strftime("%A")
     
+    # before this date, released charts were Monday-based, afterwards Saturday-based
     switchover_date = datetime.date(1961, 12, 25)
     
     if date <= switchover_date :
