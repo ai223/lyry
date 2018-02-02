@@ -207,32 +207,32 @@ def get_song_and_artist_names(chart_url_list) :
 def extract_billboard_lyrics(song_name, artist_name) :
     
     metrolyrics_url = create_metrolyrics_url(song_name, artist_name)
-    title_and_lyrics = extract_metrolyrics(metrolyrics_url)
-    if title_and_lyrics == '' and 'and' in artist_name.lower() :
+    lyrics = extract_metrolyrics(metrolyrics_url)
+    if lyrics == '' and ' and ' in artist_name.lower() :
         pos = artist_name.lower().find(' and')
         alt_artist_name = artist_name[:pos]
         metrolyrics_url = create_metrolyrics_url(song_name, alt_artist_name)
-        title_and_lyrics = extract_metrolyrics(metrolyrics_url)
+        lyrics = extract_metrolyrics(metrolyrics_url)
                     
-    if title_and_lyrics == '' :    
+    if lyrics == '' :    
         genius_url = create_genius_url(song_name, artist_name)
-        title_and_lyrics = extract_genius(genius_url)
-        if title_and_lyrics == '' and 'and' in artist_name.lower() :
+        lyrics = extract_genius(genius_url)
+        if lyrics == '' and ' and ' in artist_name.lower() :
             pos = artist_name.lower().find(' and')
             alt_artist_name = artist_name[:pos]
             genius_url = create_genius_url(song_name, alt_artist_name)
-            title_and_lyrics = extract_genius(genius_url)
+            lyrics = extract_genius(genius_url)
         
-    if title_and_lyrics == '' :
+    if lyrics == '' :
         az_url = create_azlyrics_url(song_name, artist_name)
-        title_and_lyrics = extract_azlyrics(az_url)
-        if title_and_lyrics == '' and 'and' in artist_name.lower() :
+        lyrics = extract_azlyrics(az_url)
+        if lyrics == '' and ' and ' in artist_name.lower() :
             pos = artist_name.lower().find(' and')
             alt_artist_name = artist_name[:pos]
             az_url = create_azlyrics_url(song_name, alt_artist_name)
-            title_and_lyrics = extract_azlyrics(az_url)
+            lyrics = extract_azlyrics(az_url)
 
-    return title_and_lyrics
+    return lyrics
 
 
 """ """
@@ -258,17 +258,14 @@ def write_billboard_lyrics_txt(chart_url_list, all_songs_and_artists_dict) :
                 last_week = song_and_artist_pair[3]
                 weeks_on = song_and_artist_pair[4]
                 
-                title_and_lyrics = extract_billboard_lyrics(song_name, artist_name)
+                lyrics = extract_billboard_lyrics(song_name, artist_name)
                 
-                if title_and_lyrics == '' : 
+                if lyrics == '' : 
                     tot_num_missd += 1
                     continue
                 
-                title =  title_and_lyrics[0]
-                lyrics = title_and_lyrics[1]
-                
                 # write song title, lyrics, current position, last week's position and 
-                file.write(title)
+                file.write(artist_name + ": " + song_name)
                 file.write("\nPosition: " + position + "\n")
                 file.write(last_week + "\n")
                 file.write("Weeks on chart: " + weeks_on + "\n\n")
@@ -305,16 +302,13 @@ def write_billboard_lyrics_csv(chart_url_list, all_songs_and_artists_dict) :
                 last_week = song_and_artist_iter[3]
                 weeks_on = song_and_artist_iter[4]
                 
-                title_and_lyrics = extract_billboard_lyrics(song_name, artist_name)
+                lyrics = extract_billboard_lyrics(song_name, artist_name)
                 
-                if title_and_lyrics == '' : 
+                if lyrics == '' : 
                     tot_num_missd += 1
                     continue
-                
-                title =  title_and_lyrics[0]
-                lyrics = title_and_lyrics[1]   
-                
-                row = [position, title, lyrics, last_week, weeks_on]
+                                
+                row = [position, artist_name, song_name, lyrics, last_week, weeks_on]
                 writer.writerow(row)  
             
             success_row_header = ["Total Songs", "Found Songs", "Success Rate"]
@@ -323,6 +317,7 @@ def write_billboard_lyrics_csv(chart_url_list, all_songs_and_artists_dict) :
             writer.writerow(success_row_report)
     
     return
+
 
 """  """
 def write_billboard_lyrics_csv2(chart_url_list, all_songs_and_artists_dict) :
@@ -381,18 +376,26 @@ def write_billboard_lyrics_csv2(chart_url_list, all_songs_and_artists_dict) :
             last_week = song_and_artist_iter[3]
             weeks_on = song_and_artist_iter[4]        
         
-            title_and_lyrics = extract_billboard_lyrics(song_name, artist_name)
+            # sometimes two songs are grouped together in one position
+            if "/" in song_name :
+                print("Get's here!")
+                tot_num_songs += 1
+                rows = deal_with_two_songs(filename, position, song_name, artist_name, last_week, weeks_on)
+                ws.append(rows[0])
+                ws.append(rows[1])
+                tot_num_missd += rows[2]
+                wb.save(filename)
+                continue
+        
+            lyrics = extract_billboard_lyrics(song_name, artist_name)
 
             # if lyrics were not found
-            if title_and_lyrics == '' : 
+            if lyrics == '' : 
                 tot_num_missd += 1
                 row = [position, song_name, artist_name, 'COULD NOT FIND']
                 ws.append(row)
                 wb.save(filename)
                 continue
-
-            lyrics = title_and_lyrics[1]
-
         
             row = [position, song_name, artist_name, lyrics, last_week, weeks_on]
             ws.append(row)
@@ -405,6 +408,30 @@ def write_billboard_lyrics_csv2(chart_url_list, all_songs_and_artists_dict) :
         ws.append(success_row_report) 
 #         wb.remove_sheet(wb.get_sheet_names()[0])
         wb.save(filename)   
+
+
+""" Sometimes on older billboard charts, two songs are grouped together in one position. """
+def deal_with_two_songs(filename, position, song_name, artist_name, last_week, weeks_on) :
+    add_num_missd = 0
+    
+    split = song_name.find("/")
+    song_name_1 = song_name[:split]
+    song_name_2 = song_name[split+1:]
+    
+    lyrics_1 = extract_billboard_lyrics(song_name_1, artist_name)
+    lyrics_2 = extract_billboard_lyrics(song_name_2, artist_name)
+        
+    row_1 = [position, song_name_1, artist_name, lyrics_1, last_week, weeks_on]
+    row_2 = [position, song_name_2, artist_name, lyrics_2, last_week, weeks_on]
+    
+    if lyrics_1 == '' :
+        add_num_missd += 1
+        row_1 = [position, song_name_1, artist_name, 'COULD NOT FIND']
+    if lyrics_2 == '' :
+        add_num_missd += 1
+        row_2 = [position, song_name_2, artist_name, 'COULD NOT FIND']
+
+    return (row_1, row_2, add_num_missd)
 
 
 """  """
@@ -449,11 +476,6 @@ def extract_metrolyrics(url) :
         
     soup = BeautifulSoup(html, 'lxml')
     
-    title = soup.find("title").text
-    # remove "Metrolyrics" from title 
-    split = title.find("|")
-    title = title[:split-1] + "\n\n"
-    
     lyrics = ''             
     verse_tags = soup.select('.verse')
     if len(verse_tags) == 0 :
@@ -463,7 +485,7 @@ def extract_metrolyrics(url) :
     for tag in verse_tags :
         lyrics = lyrics + tag.text +"\n"
     
-    return (title, lyrics)
+    return lyrics
 
 
 """  """
@@ -494,14 +516,11 @@ def extract_azlyrics(url) :
         
     soup = BeautifulSoup(html, 'lxml')
     
-    #get song name and artist
-    title = soup.find("title").text
-    
     # get lyrics
     div_tags = soup.findAll("div", {"class":None})
     lyrics = div_tags[1].text
     
-    return (title, lyrics)
+    return lyrics
 
 
 """  """
@@ -528,13 +547,13 @@ def extract_genius(url) :
         
     soup = BeautifulSoup(html, 'lxml')
     
-    #get song name and artist 
-    title = soup.find("title").text[:-16] # slice " | Genius Lyrics" our of title
+#     #get song name and artist 
+#     title = soup.find("title").text[:-16] # slice " | Genius Lyrics" our of title
     
     # get lyrics
     lyrics = soup.select(".lyrics")[0].text
     
-    return (title, lyrics)
+    return lyrics
 
 
 """ """
@@ -560,7 +579,7 @@ def display_options() :
 
 """"""
 def cleanup_song(name) :
-    punctuation = '!"\'()*+,./:;<=>?@[\\]^_`{|}~'
+    punctuation = '!"\'()*+,.:;<=>?@[\\]^_`{|}~'
     table = str.maketrans(dict.fromkeys(punctuation))
     name = name.translate(table)
             
