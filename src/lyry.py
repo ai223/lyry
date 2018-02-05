@@ -12,6 +12,7 @@ import datetime
 
 import openpyxl
 from openpyxl.styles.fonts import Font
+from tqdm import tqdm
 
 # global variables
 chart_names = []
@@ -180,7 +181,7 @@ def get_song_and_artist_names(chart_url_list) :
     all_songs_and_artists_dict = {}
     
     print("Extracting song and artist information...")
-    for url in chart_url_list :
+    for url in tqdm(chart_url_list) :
         
         html = requestURL(url)
         soup = BeautifulSoup(html, 'lxml')
@@ -221,7 +222,7 @@ def get_song_and_artist_names(chart_url_list) :
 
 
 """ """
-def extract_billboard_lyrics(song_name, artist_name) :
+def extract_billboard_lyrics(song_name, artist_name, filename) :
     
     metrolyrics_url = create_metrolyrics_url(song_name, artist_name)
     lyrics = extract_metrolyrics(metrolyrics_url)
@@ -249,6 +250,13 @@ def extract_billboard_lyrics(song_name, artist_name) :
             az_url = create_azlyrics_url(song_name, alt_artist_name)
             lyrics = extract_azlyrics(az_url)
 
+    if lyrics == '' :
+        with open(filename + " (failed urls)", 'w', encoding="utf-8") as file :
+            file.write(metrolyrics_url + "\n")
+            file.write(genius_url + "\n")
+            file.write(az_url + "\n")
+            file.write(sep)
+
     return lyrics
 
 
@@ -275,7 +283,7 @@ def write_billboard_lyrics_txt(chart_url_list, all_songs_and_artists_dict) :
                 last_week = song_and_artist_pair[3]
                 weeks_on = song_and_artist_pair[4]
                 
-                lyrics = extract_billboard_lyrics(song_name, artist_name)
+                lyrics = extract_billboard_lyrics(song_name, artist_name, filename)
                 
                 if lyrics == '' : 
                     tot_num_missd += 1
@@ -339,35 +347,36 @@ def write_billboard_lyrics_csv(chart_url_list, all_songs_and_artists_dict) :
         ws.column_dimensions['E'].width = 10
         ws.column_dimensions['F'].width = 10
         
+        # set spreadsheet header and style it
         header = ['Position', 'Song Name', 'Artist Name', 'Lyrics', 'Last Week', "Weeks On"]
         ws.append(header)
         for cell in ws[1:1] :
             cell.font = Font(bold = True)
         
-        for song_and_artist_iter in song_and_artist_list :
+        # begin extracting billboard chart lyrics
+        for song_and_artist_iter in tqdm(song_and_artist_list) :
             song_name   = song_and_artist_iter[0]
             artist_name = song_and_artist_iter[1]
             position = song_and_artist_iter[2]
             last_week = song_and_artist_iter[3]
             weeks_on = song_and_artist_iter[4]        
         
-            # sometimes two songs are grouped together in one position
+            # sometimes two songs are grouped together in one position and must be separated
             if "/" in song_name :
-                print("Get's here!")
                 tot_num_songs += 1
-                rows = deal_with_two_songs(filename, position, song_name, artist_name, last_week, weeks_on)
+                rows = deal_with_two_songs(position, song_name, artist_name, last_week, weeks_on)
                 ws.append(rows[0])
                 ws.append(rows[1])
                 tot_num_missd += rows[2]
                 wb.save(filename)
                 continue
         
-            lyrics = extract_billboard_lyrics(song_name, artist_name)
+            lyrics = extract_billboard_lyrics(song_name, artist_name, filename[:-5])
 
             # if lyrics were not found
             if lyrics == '' : 
                 tot_num_missd += 1
-                row = [position, song_name, artist_name, 'COULD NOT FIND']
+                row = [position, song_name, artist_name, 'COULD NOT FIND', last_week, weeks_on]
                 ws.append(row)
                 wb.save(filename)
                 continue
@@ -395,12 +404,12 @@ def write_billboard_lyrics_csv(chart_url_list, all_songs_and_artists_dict) :
 
 
 """ Sometimes on older billboard charts, two songs are grouped together in one position. """
-def deal_with_two_songs(filename, position, song_name, artist_name, last_week, weeks_on) :
+def deal_with_two_songs(position, song_name, artist_name, last_week, weeks_on) :
     add_num_missd = 0
     
-    split = song_name.find("/")
-    song_name_1 = song_name[:split]
-    song_name_2 = song_name[split+1:]
+    songs = song_name.split("/")
+    song_name_1 = songs[0]
+    song_name_2 = songs[1]
     
     lyrics_1 = extract_billboard_lyrics(song_name_1, artist_name)
     lyrics_2 = extract_billboard_lyrics(song_name_2, artist_name)
@@ -410,10 +419,10 @@ def deal_with_two_songs(filename, position, song_name, artist_name, last_week, w
     
     if lyrics_1 == '' :
         add_num_missd += 1
-        row_1 = [position, song_name_1, artist_name, 'COULD NOT FIND']
+        row_1 = [position, song_name_1, artist_name, 'COULD NOT FIND', last_week, weeks_on]
     if lyrics_2 == '' :
         add_num_missd += 1
-        row_2 = [position, song_name_2, artist_name, 'COULD NOT FIND']
+        row_2 = [position, song_name_2, artist_name, 'COULD NOT FIND', last_week, weeks_on]
 
     return (row_1, row_2, add_num_missd)
 
@@ -421,7 +430,7 @@ def deal_with_two_songs(filename, position, song_name, artist_name, last_week, w
 """  """
 def go_again() :
     print(sep + "\nExtraction is complete. Would you like to extract more lyrics?")
-    ans = input("\nEnter 'y' to continue, or 'n' or 'q' to quit: ").lower().strip()
+    ans = input("\nEnter 'y' to continue or 'n' to quit: ").lower().strip()
     
     if ans == 'y' :
         script_start(sep + "Pick another chart.")
@@ -463,7 +472,7 @@ def extract_metrolyrics(url) :
     lyrics = ''             
     verse_tags = soup.select('.verse')
     if len(verse_tags) == 0 :
-        print("\tCould not find: " + url)
+#         print("\tCould not find: " + url)
         return ''
     
     for tag in verse_tags :
@@ -555,13 +564,19 @@ def createFilename(chart_url, csv=False) :
     
                   
         
-""" Shows user message containing possible keyboard inputs """
+""" Shows user a message indicating possible keyboard inputs:
+        - ls: allows a user to list all available billboardcharts
+        -  q: allows a user to abort the program """
 def display_options() :
     print("\tls -" + " "*10 + "display all chart names")
     print("\tq  -" + " "*10 + "exit program")    
 
 
-""""""
+""" Remove illegal symbols from the song name to create valid urls. These include most 
+    punctuation. There are some exceptions. The '/' symbol is sometimes used to separate
+    two songs and is handled separately. 
+
+    @return a cleaned-up version of the song name """
 def cleanup_song(name) :
     punctuation = '!"\'()*+,.:;<=>?@[\\]^_`{|}~'
     table = str.maketrans(dict.fromkeys(punctuation))
@@ -579,9 +594,8 @@ def cleanup_song(name) :
     Next, check for special cases of artist names that include punctuation, e.g. 
     'P!nk". In such cases, the punctuation maps to a letter: '!' becomes 'i'. 
     
-    Finally, remove any
-    other punctuation that appears in the name, but does not map to a letter. E.g.
-    'Panic! at the Disco' becomes 'Panic at the Disco.' 
+    Finally, remove any other punctuation that appears in the name, but does not 
+    map to a letter. E.g.'Panic! at the Disco' becomes 'Panic at the Disco.' 
     
     @return artist name edited for url inclusion """
 def cleanup_artist(name) :
@@ -708,7 +722,7 @@ def requestURL(url) :
     if req.status_code == 200 :
         return req.text
     else :
-        print("\tCould not find: " + url)
+#         print("\tCould not find: " + url)
         return ''
     
 
