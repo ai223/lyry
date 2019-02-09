@@ -60,12 +60,18 @@ def pull_chart_names() :
     html = requestURL(url)
     
     soup = BeautifulSoup(html, 'lxml')
-    chart_links = soup.select('.chart-row__chart-link')
+    chart_links = soup.select('.chart-panel__link')
+    chart_names = soup.select('.chart-panel__text')
     
-    name_list, href_list= [], []
+    href_list = []
     for i in chart_links :
-        name_list.append(i.string)
         href_list.append(i['href'])
+    
+    name_list = []    
+    for j in chart_names :
+        name_list.append(j.string[1:-1]);   
+    name_list = name_list[14:]
+
     chart_dict = dict(zip(name_list, href_list))
 
     return (name_list, chart_dict)
